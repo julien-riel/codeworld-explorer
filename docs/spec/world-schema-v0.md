@@ -760,3 +760,64 @@ Toutes ces constantes sont **versionnées avec `LAYOUT_VERSION`** et incluses da
 > `LayoutOptions` reste versionné avec `LAYOUT_VERSION` et inclus dans `effectiveConfig` (§5.4) : le modifier vaut re-layout assumé du corpus.
 
 Deux définitions normatives d'un même jeu de constantes qui déterminent les octets de l'artefact, c'est une violation de FR-026 en attente. Il n'y en a donc qu'une.
+
+---
+
+## 15. Addendum v1 — activation des symboles et relations (sprint 5)
+
+> **Portée :** phase 1, sprint 5. Ce corps du document décrit v0 ; l'addendum ci-dessous décrit ce que **v1 ajoute**. La décision de gouvernance associée est **ADR-0004**. Le corps v0 reste vrai *pour un artefact v0* : les affirmations « absent en v0 » (§2.3, §3.8.1, §3.9) portent sur v0, pas sur v1.
+
+### 15.1 Version et garde conditionnelle
+
+- `SCHEMA_VERSION = 1` ; `SUPPORTED_SCHEMA_VERSIONS = [0, 1]`. L'analyseur émet **toujours** v1 (il extrait désormais les symboles) ; un artefact d'avant le sprint 5 (v0, sans symboles) reste **lisible** par le client (FR-027).
+- `ManifestSchema.schemaVersion` : `z.union([z.literal(0), z.literal(1)])`. Le refus de version (FR-027) précède toujours Zod.
+- Garde de présence **conditionnelle** à la version (remplace la garde v0 « aucune entité réservée ») :
+  - v0 → `symbols`, `relations`, `summaries`, `tour` **interdits** (invariant de phase 0 inchangé) ;
+  - v1 → `symbols` et `relations` **admis** ; `summaries` et `tour` **encore réservés** (activation prévue au sprint 7).
+- L'analyseur émet `symbols` et `relations` **toujours présents** en v1 (vides si le dépôt n'a aucun code analysable), comme les collections de premier niveau v0 (§2.3).
+
+### 15.2 `Symbol` — resserrement de forme
+
+Les champs, lâches en v0 (formes gelées mais `z.string()`/`z.number().int()`), sont **resserrés** à l'activation :
+
+- `id` : `/^y_[a-z2-7]{8,32}$/` (préfixe `y_`, §15.4).
+- `sourceNodeId` : `/^n_[a-z2-7]{8,32}$/` (un `nodeId` de **fichier**).
+- `symbolType` : **vocabulaire fermé** `SymbolTypeSchema` = `class | interface | function | method | property | variable | constant | type-alias | enum | enum-member | namespace | module`. v1 **produit** le sous-ensemble top-level (`class`, `interface`, `function`, `type-alias`, `enum`, `variable`, `constant`, `namespace`) ; `method`, `property`, `enum-member`, `module` sont réservés à une granularité fine (sprint 7).
+- `startLine`, `endLine` : entiers **1-based inclusifs**, `1 ≤ startLine ≤ endLine` (garde Zod `.min(1)` + `refine`).
+- **Portée d'extraction (sprint 5) :** déclarations **top-level** exportées **ou** internes, purement **syntaxiques** (aucun vérificateur de types → déterminisme FR-026). Les fusions de déclarations (surcharges, `interface`/`namespace` répétés) sont regroupées en **un** symbole par `(nom, type)`.
+
+### 15.3 `Relation` — imports fichier→fichier
+
+- `relationType` : **vocabulaire fermé** `RelationTypeSchema` = `import | re-export | call | extends | implements | references`. v1 **produit** `import` et `re-export` ; le reste est réservé.
+- **Granularité node→node**, profondeur 1 : une arête par `(fichier source, fichier cible, type)`. `sourceRef`/`targetRef` sont des `RefTarget` de `kind: "node"`.
+- **Résolution LEXICALE** (dans l'analyseur, **jamais** par le vérificateur de modules de TypeScript, pour rester déterministe et hors surface `tsconfig`/`node_modules`, §22.2) : seuls les spécificateurs **relatifs** résolus vers un fichier du dépôt produisent une relation ; les spécificateurs « bare » (npm, alias) sont **ignorés** (dépendance externe hors périmètre, §14.6). Conventions reproduites : extensions omises, `./x.js` → `./x.ts` (nodenext), `index.*` de dossier.
+- `confidence = 1000` (import relatif résolu par l'AST : certitude, §20.3). `evidence` : `{ kind: "resolved-path", detail }` + un `{ kind: "module-specifier", detail }` par spécificateur distinct.
+
+### 15.4 Ordre canonique (extension du §2.4) et identité (extension du §4.2)
+
+Clés de tri ajoutées (ordre de code-unit UTF-16) :
+
+| Tableau | Clé de tri |
+|---|---|
+| `World.symbols` | `id` |
+| `World.relations` | `(sourceRef, targetRef, relationType)`, chaque `RefTarget` comparé par `"kind:id"` |
+| `Relation.evidence` | `(kind, detail)` |
+
+Identifiant dérivé, **même `idHash` que le §4.2** :
+
+```
+symbolId(...) = "y_" + idHash( sourceNodeId + "|" + qualifiedName + "|" + symbolType )   // §15.2
+```
+
+La clé **n'inclut pas** `startLine` : un symbole déplacé par une édition sans rapport conserve son identité (stabilité inter-commit, cohérente avec ADR-0003). `symbolType` distingue les fusions de types différents (`interface Foo` vs `const Foo`). Au sein d'un fichier, `(qualifiedName, symbolType)` est unique en TypeScript valide ; toute collision résiduelle est signalée par le garde d'intégrité (`IdCollisionError`, levier `idHashLength`, §4.3), jamais silencieuse. Zod : `/^y_[a-z2-7]{8,32}$/`.
+
+### 15.5 `SearchIndex` (extension du §3.8.1)
+
+`SearchDoc.symbolNames` est **peuplé** en v1 (il était absent en v0) : présent **SSI** le nœud est un **fichier** portant au moins un symbole ; il recopie les **noms** de ses symboles top-level, triés en code-unit UTF-16 et dédupliqués. La **bijection** `SourceNode.id ↔ SearchDoc.ref` du §3.8.1 est **préservée** : on reste au niveau node (un document par nœud) ; la ré-affectation de `ref` à un `symbolId` reste réservée au sprint 7.
+
+### 15.6 Intégrité référentielle (extension du §3.5.3)
+
+Deux gardes de pipeline s'ajoutent à `assertTreeInvariants`/`assertLayoutInvariants`, exécutées **avant** la sérialisation et la validation Zod :
+
+- `assertSymbolInvariants(symbols, nodes, idHashLength)` : identité dérivée (`id === symbolId(...)`), `sourceNodeId` résolu vers un **fichier**, `1 ≤ startLine ≤ endLine`, unicité globale des `id`, tri par `id`.
+- `assertRelationInvariants(relations, nodes, symbols)` : chaque `RefTarget` résolu (node ou symbol présent), `evidence` triée, tableau `relations` trié.

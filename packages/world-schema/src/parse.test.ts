@@ -72,9 +72,10 @@ describe("assertSupportedSchemaVersion (contrat §9.1, FR-027)", () => {
     expect(assertSupportedSchemaVersion(makeMinimalWorld())).toBe(0);
   });
 
-  it("version inconnue (supportée + 1) : lève UnsupportedSchemaVersionError, PAS une erreur Zod", () => {
+  it("version inconnue (au-delà des supportées) : lève UnsupportedSchemaVersionError, PAS une erreur Zod", () => {
     const world = makeMinimalWorld();
-    const bad = { ...world, manifest: { ...world.manifest, schemaVersion: 1 } };
+    // Supportées = {0, 1} depuis l'activation phase 1 ; 2 est la première inconnue.
+    const bad = { ...world, manifest: { ...world.manifest, schemaVersion: 2 } };
     expect(() => assertSupportedSchemaVersion(bad)).toThrow(UnsupportedSchemaVersionError);
     try {
       assertSupportedSchemaVersion(bad);
@@ -82,11 +83,11 @@ describe("assertSupportedSchemaVersion (contrat §9.1, FR-027)", () => {
       expect(error).toBeInstanceOf(UnsupportedSchemaVersionError);
       if (error instanceof UnsupportedSchemaVersionError) {
         expect(error.kind).toBe("unsupported-schema-version");
-        expect(error.found).toBe(1);
-        expect(error.supported).toEqual([0]);
+        expect(error.found).toBe(2);
+        expect(error.supported).toEqual([0, 1]);
         // Message explicite et exploitable : contient version trouvée et supportées.
+        expect(error.message).toContain("2");
         expect(error.message).toContain("1");
-        expect(error.message).toContain("0");
       }
     }
   });
@@ -167,7 +168,7 @@ describe("loadWorld (variante Result, client — contrat §9.1)", () => {
       expect(res.error.kind).toBe("unsupported-schema-version");
       if (res.error.kind === "unsupported-schema-version") {
         expect(res.error.found).toBe(7);
-        expect(res.error.supported).toEqual([0]);
+        expect(res.error.supported).toEqual([0, 1]);
       }
     }
   });

@@ -72,3 +72,23 @@ export function portalId(
 ): string {
   return "p_" + idHash(`${fromSpatialNodeId}->${toSpatialNodeId}|${kind}`, idHashLength);
 }
+
+/**
+ * `id` d'un `Symbol` : `"y_" + idHash(sourceNodeId + "|" + qualifiedName + "|" + symbolType)`
+ * (contrat §4.2, §3.9 ; ADR-0005).
+ *
+ * La clé N'INCLUT PAS `startLine` : un symbole déplacé par une édition sans rapport
+ * garde son identité (stabilité inter-commit, cohérente avec ADR-0003). Elle inclut
+ * `symbolType` pour distinguer les fusions de déclarations (`interface Foo` et
+ * `const Foo` coexistants). Au sein d'un même fichier, `(qualifiedName, symbolType)`
+ * est unique en TypeScript valide ; une collision résiduelle est signalée par le
+ * garde d'intégrité (contrat §4.3, levier `idHashLength`), jamais silencieuse.
+ */
+export function symbolId(
+  sourceNodeId: string,
+  qualifiedName: string,
+  symbolType: string,
+  idHashLength: number = DEFAULT_ID_HASH_LENGTH,
+): string {
+  return "y_" + idHash(`${sourceNodeId}|${qualifiedName}|${symbolType}`, idHashLength);
+}

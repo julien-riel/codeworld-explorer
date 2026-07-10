@@ -21,6 +21,8 @@ import {
   LAYOUT_VERSION,
   SCHEMA_VERSION,
   assertLayoutInvariants,
+  assertRelationInvariants,
+  assertSymbolInvariants,
   assertTreeInvariants,
   computeLayout,
   parseWorld,
@@ -37,6 +39,7 @@ import { ANALYZER_VERSION } from "./version.js";
 import { resolveConfig, type FileConfig } from "./config.js";
 import { inventory, nodeFsPort, type FsPort } from "./inventory.js";
 import { classifyDirectory } from "./classify.js";
+import { extractCode } from "./code.js";
 import { buildSearchIndex } from "./search.js";
 import { IdCollisionError, InvalidRootError } from "./errors.js";
 
@@ -48,6 +51,9 @@ export interface AnalyzeStats {
   readonly directories: number;
   readonly rooms: number;
   readonly classifications: number;
+  readonly symbols: number;
+  readonly relations: number;
+  readonly parsedFiles: number;
 }
 
 /** Produit du pipeline : l'artefact validé, les contenus, les avertissements, les stats. */
@@ -160,10 +166,15 @@ export async function analyze(rootPath: string, options: AnalyzeOptions = {}): P
   const tree = buildLayoutTree(nodes);
   const layout = computeLayout(tree, categoryByDirId, config.layoutSeed, DEFAULT_LAYOUT_OPTIONS);
 
-  // 6. Index de recherche (couverture totale, bijection).
-  const search = buildSearchIndex(nodes, categoryByDirId);
+  // 6. Analyse statique du code (symboles + relations d'import, sprint 5). Étape PURE :
+  //    projet ts-morph en mémoire depuis `fileContents`, aucune résolution externe.
+  const code = extractCode(nodes, fileContents, config.idHashLength);
 
-  // Assemblage de l'artefact.
+  // 7. Index de recherche (couverture totale, bijection), enrichi des noms de symboles.
+  const search = buildSearchIndex(nodes, categoryByDirId, code.symbolsByNodeId);
+
+  // Assemblage de l'artefact. `symbols`/`relations` sont TOUJOURS présents en v1
+  // (vides si le dépôt n'a aucun code analysable), comme les collections v0 (§2.3).
   const world: World = {
     manifest: {
       schemaVersion: SCHEMA_VERSION,
@@ -188,19 +199,23 @@ export async function analyze(rootPath: string, options: AnalyzeOptions = {}): P
     classifications,
     layout,
     search,
+    symbols: code.symbols,
+    relations: code.relations,
   };
 
-  // 7. GARDES avant tout retour/écriture : un artefact non conforme n'existe pas.
+  // 8. GARDES avant tout retour/écriture : un artefact non conforme n'existe pas.
   assertTreeInvariants(nodes, config.idHashLength);
   assertLayoutInvariants(layout, tree, DEFAULT_LAYOUT_OPTIONS);
+  assertSymbolInvariants(code.symbols, nodes, config.idHashLength);
+  assertRelationInvariants(code.relations, nodes, code.symbols);
 
-  // 8. Validation Zod (forme du contrat §3, refus des entités réservées §3.9).
+  // 9. Validation Zod (forme du contrat §3, garde conditionnelle des entités §3.9).
   const validated = parseWorld(world);
 
   return {
     world: validated,
     files: fileContents,
-    warnings,
+    warnings: [...warnings, ...code.warnings],
     stats: {
       nodes: nodes.length,
       files: stats.files,
@@ -208,6 +223,9 @@ export async function analyze(rootPath: string, options: AnalyzeOptions = {}): P
       directories: stats.directories,
       rooms: layout.spatialNodes.length,
       classifications: classifications.length,
+      symbols: code.symbols.length,
+      relations: code.relations.length,
+      parsedFiles: code.stats.parsedFiles,
     },
   };
 }

@@ -35,10 +35,19 @@ describe("FR-027 : parseWorld réussit sur un artefact v0 valide", () => {
   }
 });
 
-describe("FR-027 : parseWorld refuse une version inconnue AVANT Zod", () => {
-  it("schemaVersion supportée + 1 → UnsupportedSchemaVersionError (pas une erreur Zod)", () => {
+describe("FR-027 : v1 est supportée en lecture (activation phase 1, ADR-0004)", () => {
+  it("un artefact de schemaVersion 1 sans entité réservée est accepté", () => {
     const valid = buildWorld(tiny);
-    const bumped: unknown = { ...valid, manifest: { ...valid.manifest, schemaVersion: 1 } };
+    const v1: unknown = { ...valid, manifest: { ...valid.manifest, schemaVersion: 1 } };
+    const parsed = parseWorld(v1);
+    expect(parsed.manifest.schemaVersion).toBe(1);
+  });
+});
+
+describe("FR-027 : parseWorld refuse une version inconnue AVANT Zod", () => {
+  it("première version au-delà des supportées (2) → UnsupportedSchemaVersionError (pas une erreur Zod)", () => {
+    const valid = buildWorld(tiny);
+    const bumped: unknown = { ...valid, manifest: { ...valid.manifest, schemaVersion: 2 } };
     expect(() => parseWorld(bumped)).toThrow(UnsupportedSchemaVersionError);
     try {
       parseWorld(bumped);
@@ -46,8 +55,8 @@ describe("FR-027 : parseWorld refuse une version inconnue AVANT Zod", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(UnsupportedSchemaVersionError);
       if (error instanceof UnsupportedSchemaVersionError) {
-        expect(error.found).toBe(1);
-        expect(error.supported).toContain(0);
+        expect(error.found).toBe(2);
+        expect(error.supported).toContain(1);
       }
     }
   });

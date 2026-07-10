@@ -34,7 +34,10 @@ async function makeToyRepo(root: string): Promise<void> {
 
   await writeFile(join(root, "README.md"), "# Toy\n");
   await writeFile(join(root, "package.json"), '{"name":"toy"}\n');
-  await writeFile(join(root, "src", "index.ts"), "export const x = 1;\n");
+  await writeFile(
+    join(root, "src", "index.ts"),
+    'import { user } from "./services/user";\nexport const x = 1;\nexport { user };\n',
+  );
   await writeFile(join(root, "src", "services", "user.ts"), "export function user() {}\n");
   await writeFile(join(root, "src", "utils", "helpers.ts"), "export const h = 2;\n");
   await writeFile(join(root, "docs", "guide.md"), "# Guide\n");
@@ -94,6 +97,51 @@ describe("analyze — artefact valide", () => {
     expect(cls?.decisionSource).toBe("rule");
     expect(cls?.confidence).toBe(1000);
     expect(cls?.overriddenByConfig).toBe(false);
+  });
+});
+
+describe("analyse statique — symboles et relations (sprint 5, phase 1)", () => {
+  it("émet un artefact v1 porteur de symbols/relations toujours présents", async () => {
+    const result = await analyze(root, {});
+    expect(result.world.manifest.schemaVersion).toBe(1);
+    // Collections de phase 1 toujours présentes (vides si vides, §2.3).
+    expect(Array.isArray(result.world.symbols)).toBe(true);
+    expect(Array.isArray(result.world.relations)).toBe(true);
+    expect(() => parseWorld(result.world)).not.toThrow();
+  });
+
+  it("extrait les symboles top-level des fichiers TS", async () => {
+    const result = await analyze(root, {});
+    const userFile = result.world.nodes.find((n) => n.path === "src/services/user.ts");
+    const userSym = result.world.symbols?.find(
+      (s) => s.sourceNodeId === userFile?.id && s.name === "user",
+    );
+    expect(userSym?.symbolType).toBe("function");
+    expect(userSym?.exported).toBe(true);
+    // Le fichier de test ne déclare rien : aucun symbole rattaché.
+    const testFile = result.world.nodes.find((n) => n.path === "test/user.test.ts");
+    expect(result.world.symbols?.some((s) => s.sourceNodeId === testFile?.id)).toBe(false);
+  });
+
+  it("résout un import relatif en relation fichier→fichier", async () => {
+    const result = await analyze(root, {});
+    const index = result.world.nodes.find((n) => n.path === "src/index.ts");
+    const user = result.world.nodes.find((n) => n.path === "src/services/user.ts");
+    const rel = result.world.relations?.find(
+      (r) => r.sourceRef.id === index?.id && r.targetRef.id === user?.id,
+    );
+    expect(rel?.relationType).toBe("import");
+    expect(rel?.confidence).toBe(1000);
+  });
+
+  it("enrichit l'index de recherche avec symbolNames sur les fichiers", async () => {
+    const result = await analyze(root, {});
+    const index = result.world.nodes.find((n) => n.path === "src/index.ts");
+    const doc = result.world.search.documents.find((d) => d.ref === index?.id);
+    expect(doc?.symbolNames).toContain("x");
+    // Un dossier ne porte jamais symbolNames.
+    const dirDoc = result.world.search.documents.find((d) => d.kind === "directory");
+    expect(dirDoc?.symbolNames).toBeUndefined();
   });
 });
 

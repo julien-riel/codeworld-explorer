@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { canonicalStringify, canonicalBytes } from "./canonical.js";
+import { canonicalStringify, canonicalBytes, hashWorld } from "./canonical.js";
+import { sha256Hex } from "./hash/sha256.js";
 import { NonCanonicalNumberError, NonCanonicalValueError } from "./errors.js";
 
 describe("canonicalStringify — ordre des clés", () => {
@@ -110,5 +111,17 @@ describe("canonicalStringify — forme du fichier (contrat §6.2)", () => {
     const bytes = canonicalBytes("é");
     // Pas de BOM EF BB BF ; "é" en UTF-8 = C3 A9, entouré des guillemets 0x22.
     expect(Array.from(bytes)).toEqual([0x22, 0xc3, 0xa9, 0x22]);
+  });
+});
+
+describe("hashWorld — empreinte octet FR-026 (contrat §10.3)", () => {
+  it("= sha256Hex(canonicalBytes) et insensible à l'ordre des clés d'entrée", () => {
+    const a = { b: 1, a: [3, 2, 1], c: { y: 0, x: 0 } };
+    const b = { c: { x: 0, y: 0 }, a: [3, 2, 1], b: 1 };
+    expect(hashWorld(a)).toBe(sha256Hex(canonicalBytes(a)));
+    // Même contenu, ordre d'insertion différent → même empreinte.
+    expect(hashWorld(a)).toBe(hashWorld(b));
+    // Un tableau réordonné (le producteur ne trie pas ici) → empreinte différente.
+    expect(hashWorld(a)).not.toBe(hashWorld({ ...a, a: [1, 2, 3] }));
   });
 });

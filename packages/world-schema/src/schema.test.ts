@@ -117,22 +117,45 @@ describe("WorldSchema (contrat §3, §2.3)", () => {
     expect(SourceNodeSchema.safeParse({ ...node, depth: 1.5 }).success).toBe(false);
   });
 
-  it("épingle manifest.schemaVersion à 0 (défense en profondeur, contrat §9.1)", () => {
+  it("borne manifest.schemaVersion à {0, 1} (défense en profondeur, contrat §9.1)", () => {
     const world = makeMinimalWorld();
-    const bad = { ...world, manifest: { ...world.manifest, schemaVersion: 1 } };
-    expect(WorldSchema.safeParse(bad).success).toBe(false);
+    // v1 sans entité réservée : accepté (l'activation phase 1 n'exige pas leur présence).
+    expect(WorldSchema.safeParse({ ...world, manifest: { ...world.manifest, schemaVersion: 1 } }).success).toBe(true);
+    // v2 : hors de l'union — rejeté par Zod (le refus de version le précède via parseWorld).
+    expect(WorldSchema.safeParse({ ...world, manifest: { ...world.manifest, schemaVersion: 2 } }).success).toBe(false);
   });
 });
 
-describe("entités réservées sprints 5–7 (contrat §3.9)", () => {
-  it("absentes : n'invalident pas l'artefact", () => {
+describe("garde conditionnelle des entités de phase 1 (contrat §3.9, ADR-0004)", () => {
+  /** Artefact v1 minimal : mêmes formes que v0, `symbols`/`relations` présents et vides. */
+  function makeV1World(): World {
+    const w = makeMinimalWorld();
+    return { ...w, manifest: { ...w.manifest, schemaVersion: 1 }, symbols: [], relations: [] };
+  }
+
+  it("v0 : absence des 4 entités réservées — valide", () => {
     expect(WorldSchema.safeParse(makeMinimalWorld()).success).toBe(true);
   });
 
   for (const key of ["symbols", "relations", "summaries", "tour"] as const) {
-    it(`présente en v0 (${key}) : rejetée`, () => {
+    it(`v0 avec ${key} présent : rejeté`, () => {
       const world = { ...makeMinimalWorld(), [key]: key === "tour" ? { title: "t", steps: [], generatedBy: "x" } : [] };
       const res = WorldSchema.safeParse(world);
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.error.issues.some((i) => i.path[0] === key)).toBe(true);
+      }
+    });
+  }
+
+  it("v1 avec symbols/relations (même vides) : accepté", () => {
+    expect(WorldSchema.safeParse(makeV1World()).success).toBe(true);
+  });
+
+  for (const key of ["summaries", "tour"] as const) {
+    it(`v1 avec ${key} (réservé sprint 7) : rejeté`, () => {
+      const bad = { ...makeV1World(), [key]: key === "tour" ? { title: "t", steps: [], generatedBy: "x" } : [] };
+      const res = WorldSchema.safeParse(bad);
       expect(res.success).toBe(false);
       if (!res.success) {
         expect(res.error.issues.some((i) => i.path[0] === key)).toBe(true);

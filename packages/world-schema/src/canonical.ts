@@ -7,7 +7,7 @@
  */
 
 import { NonCanonicalNumberError, NonCanonicalValueError } from "./errors.js";
-import { utf8 } from "./hash/sha256.js";
+import { sha256Hex, utf8 } from "./hash/sha256.js";
 
 /** Comparaison en ordre de code-unit UTF-16 (comparaison native des chaînes). */
 function compareCodeUnit(a: string, b: string): number {
@@ -53,4 +53,14 @@ export function canonicalStringify(value: unknown): string {
 /** Encode la forme canonique en octets UTF-8 sans BOM (contrat §6.2). */
 export function canonicalBytes(value: unknown): Uint8Array {
   return utf8(canonicalStringify(value));
+}
+
+/**
+ * Empreinte SHA-256 hex des octets canoniques d'une valeur (contrat §10.3). Deux
+ * artefacts sont identiques au sens FR-026 si et seulement si leurs `hashWorld`
+ * coïncident ; sert de golden compact pour verrouiller la reproductibilité sans
+ * comparer octet à octet un fichier volumineux.
+ */
+export function hashWorld(value: unknown): string {
+  return sha256Hex(canonicalBytes(value));
 }

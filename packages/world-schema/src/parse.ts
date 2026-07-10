@@ -84,7 +84,7 @@ export function parseWorld(data: unknown): World {
     throw new WorldLoadException({
       kind: "invalid-schema",
       issues: result.error.issues,
-      message: "Artefact non conforme au schéma v0 (contrat §3).",
+      message: "Artefact non conforme au schéma (contrat §3).",
     });
   }
   return result.data;
@@ -128,7 +128,7 @@ export function loadWorld(rawJson: string): LoadResult {
       error: {
         kind: "invalid-schema",
         issues: result.error.issues,
-        message: "Artefact non conforme au schéma v0 (contrat §3).",
+        message: "Artefact non conforme au schéma (contrat §3).",
       },
     };
   }

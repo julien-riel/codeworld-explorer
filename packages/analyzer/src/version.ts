@@ -4,4 +4,4 @@
  * (contrat §3.2, §10.1) : la modifier est un changement DÉLIBÉRÉ qui autorise une
  * régénération du corpus. Elle DOIT rester synchrone avec `package.json.version`.
  */
-export const ANALYZER_VERSION = "0.1.0";
+export const ANALYZER_VERSION = "0.2.0";

@@ -18,6 +18,7 @@ export * from "./canonical.js";
 export * from "./integer.js";
 export * from "./schema.js";
 export * from "./tree.js";
+export * from "./graph.js";
 export * from "./dates.js";
 export * from "./parse.js";
 export * from "./layout/options.js";

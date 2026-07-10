@@ -5,6 +5,7 @@ import {
   nodeId,
   spatialNodeId,
   portalId,
+  symbolId,
   DEFAULT_ID_HASH_LENGTH,
 } from "./ids.js";
 
@@ -91,5 +92,30 @@ describe("dérivation des identifiants", () => {
     expect(portalId("s_AAA", "s_BBB", "door")).toBe("p_j7lm5vpje26zvgoh");
     expect(portalId("s_AAA", "s_BBB", "door")).not.toBe(portalId("s_BBB", "s_AAA", "door"));
     expect(portalId("s_AAA", "s_BBB", "door")).not.toBe(portalId("s_AAA", "s_BBB", "stair"));
+  });
+
+  it("symbolId : préfixe y_, formule (sourceNodeId|qualifiedName|symbolType)", () => {
+    const nid = nodeId("src/index.ts");
+    // Fidèle à la formule : aucun id forgé hors `y_ + idHash(clé composite)`.
+    expect(symbolId(nid, "parseWorld", "function")).toBe("y_" + idHash(`${nid}|parseWorld|function`));
+    expect(symbolId(nid, "parseWorld", "function")).toMatch(/^y_[a-z2-7]{8,32}$/);
+  });
+
+  it("symbolId : dépend de chaque composante (fusions de déclarations distinguées)", () => {
+    const nid = nodeId("src/index.ts");
+    const other = nodeId("src/other.ts");
+    // Même nom, types différents (interface Foo vs const Foo) → id différents.
+    expect(symbolId(nid, "Foo", "interface")).not.toBe(symbolId(nid, "Foo", "variable"));
+    // Même nom+type, fichiers différents → id différents.
+    expect(symbolId(nid, "Foo", "class")).not.toBe(symbolId(other, "Foo", "class"));
+    // Noms différents → id différents.
+    expect(symbolId(nid, "Foo", "class")).not.toBe(symbolId(nid, "Bar", "class"));
+  });
+
+  it("symbolId : respecte la borne configurable [8, 32] et lève hors plage", () => {
+    const nid = nodeId("a.ts");
+    expect(symbolId(nid, "x", "function", 8)).toMatch(/^y_[a-z2-7]{8}$/);
+    expect(symbolId(nid, "x", "function", 32)).toMatch(/^y_[a-z2-7]{32}$/);
+    expect(() => symbolId(nid, "x", "function", 7)).toThrow(RangeError);
   });
 });

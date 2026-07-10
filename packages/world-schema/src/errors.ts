@@ -15,6 +15,8 @@ export type WorldSchemaErrorKind =
   | "id-collision"
   | "non-normalizable-date"
   | "layout-invariant"
+  | "symbol-invariant"
+  | "relation-invariant"
   | "non-canonical-number"
   | "non-canonical-value";
 
@@ -114,6 +116,42 @@ export class LayoutInvariantError extends Error {
     this.invariant = invariant;
     this.detail = detail;
     this.spatialNodeIds = spatialNodeIds;
+  }
+}
+
+/** Violation d'un invariant d'intégrité des `Symbol` de phase 1 (contrat §3.9, §4.3). */
+export class SymbolInvariantError extends Error {
+  readonly kind = "symbol-invariant" as const;
+  /** Identifiant de la règle violée (ex. "id-derived", "source-node-resolved", "sorted-by-id"). */
+  readonly rule: string;
+  /** Description exploitable du cas fautif. */
+  readonly detail: string;
+  /** `Symbol.id` concernés, si pertinents. */
+  readonly symbolIds: readonly string[];
+  constructor(rule: string, detail: string, symbolIds: readonly string[] = [], message?: string) {
+    super(message ?? `Invariant de symbole violé (${rule}) : ${detail}`);
+    this.name = "SymbolInvariantError";
+    this.rule = rule;
+    this.detail = detail;
+    this.symbolIds = symbolIds;
+  }
+}
+
+/** Violation d'un invariant d'intégrité des `Relation` de phase 1 (contrat §3.9). */
+export class RelationInvariantError extends Error {
+  readonly kind = "relation-invariant" as const;
+  /** Identifiant de la règle violée (ex. "ref-resolved", "sorted", "evidence-sorted"). */
+  readonly rule: string;
+  /** Description exploitable du cas fautif. */
+  readonly detail: string;
+  /** Références (`kind:id`) fautives, si pertinentes. */
+  readonly refs: readonly string[];
+  constructor(rule: string, detail: string, refs: readonly string[] = [], message?: string) {
+    super(message ?? `Invariant de relation violé (${rule}) : ${detail}`);
+    this.name = "RelationInvariantError";
+    this.rule = rule;
+    this.detail = detail;
+    this.refs = refs;
   }
 }
 

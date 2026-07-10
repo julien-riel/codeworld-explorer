@@ -45,6 +45,8 @@ async function runAnalyze(pathArg: string, opts: AnalyzeCliOptions): Promise<voi
       `  nœuds       : ${String(stats.nodes)} (${String(stats.directories)} dossiers, ${String(stats.files)} fichiers, ${String(stats.analyzed)} analysés)`,
       `  salles      : ${String(stats.rooms)}`,
       `  classif.    : ${String(stats.classifications)}`,
+      `  symboles    : ${String(stats.symbols)} sur ${String(stats.parsedFiles)} fichiers de code`,
+      `  relations   : ${String(stats.relations)} (imports directs)`,
       `  contenus    : ${String(written.fileCount)} blobs sous files/`,
       `  world.json  : ${String(written.worldBytes)} octets (${kib} Kio)`,
     ].join("\n") + "\n",

@@ -18,6 +18,8 @@ import { z } from "zod";
 const nodeIdSchema = z.string().regex(/^n_[a-z2-7]{8,32}$/);
 const spatialIdSchema = z.string().regex(/^s_[a-z2-7]{8,32}$/);
 const portalIdSchema = z.string().regex(/^p_[a-z2-7]{8,32}$/);
+// Symbole (préfixe `y_`, contrat §4.2, ADR-0005) : forme resserrée dès l'activation v1.
+const symbolIdSchema = z.string().regex(/^y_[a-z2-7]{8,32}$/);
 const sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/);
 
 // ── Vecteur entier et orientation (contrat §2.1, §3.7) ──
@@ -46,7 +48,10 @@ export type Orientation = z.infer<typeof OrientationSchema>;
  * de version (FR-027, §9) le lit AVANT Zod, mais Zod le revérifie ici.
  */
 export const ManifestSchema = z.strictObject({
-  schemaVersion: z.literal(0),
+  // v0 (phase 0) ou v1 (phase 1 : symbols/relations activés, ADR-0004). Le refus de
+  // version (FR-027, §9) lit ce champ AVANT Zod ; l'union le revérifie en défense en
+  // profondeur. Toute version hors de cet ensemble est refusée avant d'atteindre Zod.
+  schemaVersion: z.union([z.literal(0), z.literal(1)]),
   analyzerVersion: z.string(),
   layoutVersion: z.number().int().min(0),
   configurationHash: sha256HexSchema,
@@ -292,30 +297,76 @@ export type SearchIndex = z.infer<typeof SearchIndexSchema>;
 // Leur FORME est figée dès v0 pour éviter tout bump majeur en phase 1 ; un artefact
 // v0 valide n'en porte AUCUNE clé (rejet à la présence : cf. WorldSchema plus bas).
 
+// Une référence désigne un `SourceNode` (par `nodeId`) ou un `Symbol` (par `symbolId`).
+// Les id sont resserrés à leur forme respective dès v1 (plus de `z.string()` lâche).
 export const RefTargetSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("node"), id: z.string() }),
-  z.strictObject({ kind: z.literal("symbol"), id: z.string() }),
+  z.strictObject({ kind: z.literal("node"), id: nodeIdSchema }),
+  z.strictObject({ kind: z.literal("symbol"), id: symbolIdSchema }),
 ]);
 export type RefTarget = z.infer<typeof RefTargetSchema>;
 
-export const SymbolSchema = z.strictObject({
-  id: z.string(),
-  sourceNodeId: z.string(),
-  name: z.string(),
-  qualifiedName: z.string(),
-  symbolType: z.string(),
-  startLine: z.number().int(),
-  endLine: z.number().int(),
-  exported: z.boolean(),
-});
+/**
+ * Vocabulaire fermé des types de symboles (contrat §3.9, ADR-0007). v1 PRODUIT le
+ * sous-ensemble de haut niveau (`class`, `interface`, `function`, `type-alias`,
+ * `enum`, `variable`, `constant`, `namespace`) ; `method`, `property`, `enum-member`
+ * et `module` sont réservés à une granularité plus fine (sprint 7), forme figée dès
+ * maintenant pour éviter un bump ultérieur.
+ */
+export const SymbolTypeSchema = z.enum([
+  "class",
+  "interface",
+  "function",
+  "method",
+  "property",
+  "variable",
+  "constant",
+  "type-alias",
+  "enum",
+  "enum-member",
+  "namespace",
+  "module",
+]);
+export type SymbolType = z.infer<typeof SymbolTypeSchema>;
+
+export const SymbolSchema = z
+  .strictObject({
+    id: symbolIdSchema,
+    sourceNodeId: nodeIdSchema,
+    name: z.string(),
+    qualifiedName: z.string(),
+    symbolType: SymbolTypeSchema,
+    // Lignes 1-based inclusives (contrat §3.9) ; l'ordre est garanti par le refine.
+    startLine: z.number().int().min(1),
+    endLine: z.number().int().min(1),
+    exported: z.boolean(),
+  })
+  .refine((s) => s.endLine >= s.startLine, {
+    message: "endLine doit être ≥ startLine (intervalle 1-based inclusif).",
+    path: ["endLine"],
+  });
 // Le nom `Symbol` (contrat §3.9) masque le type global dans ce module seul ; usage
 // type-only, aucun conflit d'exécution.
 export type Symbol = z.infer<typeof SymbolSchema>;
 
+/**
+ * Vocabulaire fermé des types de relations (contrat §3.9, §14.6). v1 PRODUIT `import`
+ * et `re-export` (arêtes fichier→fichier, profondeur 1) ; `call`, `extends`,
+ * `implements`, `references` sont réservés à l'analyse de flux ultérieure.
+ */
+export const RelationTypeSchema = z.enum([
+  "import",
+  "re-export",
+  "call",
+  "extends",
+  "implements",
+  "references",
+]);
+export type RelationType = z.infer<typeof RelationTypeSchema>;
+
 export const RelationSchema = z.strictObject({
   sourceRef: RefTargetSchema,
   targetRef: RefTargetSchema,
-  relationType: z.string(),
+  relationType: RelationTypeSchema,
   confidence: z.number().int().min(0).max(1000),
   evidence: z.array(EvidenceSchema),
 });
@@ -363,21 +414,29 @@ const worldObjectSchema = z.strictObject({
 });
 export type World = z.infer<typeof worldObjectSchema>;
 
-/** Clés d'entités réservées (contrat §3.9) : déclarées optionnelles, mais interdites en v0. */
-const RESERVED_V0_KEYS = ["symbols", "relations", "summaries", "tour"] as const;
+/** En v0 (phase 0), AUCUNE entité de phase 1 n'est admise (contrat §3.9). */
+const FORBIDDEN_KEYS_V0 = ["symbols", "relations", "summaries", "tour"] as const;
+/** En v1 (sprint 5), `symbols`/`relations` sont admis ; `summaries`/`tour` restent réservés (sprint 7). */
+const FORBIDDEN_KEYS_V1 = ["summaries", "tour"] as const;
 
 /**
- * Schéma v0 de l'artefact. Les entités réservées (sprints 5–7) sont déclarées
- * optionnelles pour figer leur forme (contrat §3.9), mais leur PRÉSENCE est rejetée :
- * « un artefact v0 valide est un artefact sans ces clés ».
+ * Schéma de l'artefact, avec garde de présence CONDITIONNELLE à `schemaVersion`
+ * (ADR-0004). Les entités de phase 1 (sprints 5–7) sont déclarées optionnelles pour
+ * figer leur forme (contrat §3.9), mais leur présence dépend de la version émise :
+ *   - v0 : aucune de `symbols`/`relations`/`summaries`/`tour` (invariant de phase 0) ;
+ *   - v1 : `symbols`/`relations` autorisés (activés au sprint 5) ; `summaries`/`tour`
+ *          encore interdits (activation prévue au sprint 7).
+ * La version elle-même est déjà bornée à {0, 1} par `ManifestSchema` ; le refus des
+ * versions inconnues précède Zod (FR-027, cf. parse.ts).
  */
 export const WorldSchema = worldObjectSchema.superRefine((world, ctx) => {
-  for (const key of RESERVED_V0_KEYS) {
+  const forbidden = world.manifest.schemaVersion === 0 ? FORBIDDEN_KEYS_V0 : FORBIDDEN_KEYS_V1;
+  for (const key of forbidden) {
     if (world[key] !== undefined) {
       ctx.addIssue({
         code: "custom",
         path: [key],
-        message: `L'entité réservée « ${key} » (sprints 5–7) ne doit pas être émise en v0 (contrat §3.9).`,
+        message: `L'entité « ${key} » n'est pas admise dans un artefact de schemaVersion ${String(world.manifest.schemaVersion)} (contrat §3.9).`,
       });
     }
   }

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { UnsupportedSchemaVersionError } from "@codeworld/world-schema";
+import { SUPPORTED_SCHEMA_VERSIONS, UnsupportedSchemaVersionError } from "@codeworld/world-schema";
 import {
   fileContentUrl,
   HttpError,
@@ -46,9 +46,27 @@ describe("loadWorld — monde valide", () => {
   it("charge et valide l'artefact réel", async () => {
     stubFetch(worldJson, { ok: true, status: 200 });
     const world = await loadWorld("schema/world.json");
-    expect(world.manifest.schemaVersion).toBe(0);
+    // Version-agnostique : l'artefact committé peut être v0 (phase 0) ou v1 (phase 1
+    // dès que l'analyseur émet des symboles) ; les deux sont supportés (FR-027).
+    expect(SUPPORTED_SCHEMA_VERSIONS).toContain(world.manifest.schemaVersion);
     expect(world.layout.spatialNodes.length).toBeGreaterThan(0);
     expect(fetch).toHaveBeenCalledWith("worlds/schema/world.json");
+  });
+
+  it("accepte un artefact v1 porteur de symbols/relations sans modifier la scène (forward-compat)", async () => {
+    // On dérive un artefact v1 de l'artefact réel : bump de version + entités phase 1.
+    // Le client doit le charger tel quel ; la scène 3D n'en consomme aucune clé.
+    const base = JSON.parse(worldJson) as Record<string, unknown> & {
+      manifest: { schemaVersion: number };
+    };
+    base.manifest.schemaVersion = 1;
+    base.symbols = [];
+    base.relations = [];
+    stubFetch(JSON.stringify(base), { ok: true, status: 200 });
+    const world = await loadWorld("schema/world.json");
+    expect(world.manifest.schemaVersion).toBe(1);
+    expect(world.symbols).toEqual([]);
+    expect(world.relations).toEqual([]);
   });
 });
 

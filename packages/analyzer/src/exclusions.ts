@@ -24,6 +24,15 @@ export const MAX_INVENTORY_NODES = 10_000;
 export const MAX_ANALYZED_FILES = 2_000;
 
 /**
+ * Plafond du nombre TOTAL de lignes de code passées à l'analyse statique (ts-morph,
+ * PRD §27.3, §16.1). Garde-fou de temps CPU distinct du plafond de fichiers : un
+ * unique fichier pathologiquement long (bundle minifié échappant à la détection
+ * binaire) ne doit pas faire exploser le temps de parsing. Volontairement large :
+ * l'objectif de perf vise 100 000 lignes en < 5 min ; ce plafond n'attrape que l'abus.
+ */
+export const MAX_PARSED_LINES = 2_000_000;
+
+/**
  * Noms de dossiers exclus par défaut, avec le `excludedReason` de la famille
  * VOLONTAIRE qui les qualifie. `node_modules`/`vendor` sont des dépendances tierces
  * (`vendored`) ; `dist`/`build`/`coverage` sont des sorties de build (`generated`) ;
