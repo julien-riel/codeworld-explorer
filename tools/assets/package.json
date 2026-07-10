@@ -1,0 +1,30 @@
+{
+  "name": "@codeworld/assets",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "codeworld-assets": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/normalize.ts",
+      "import": "./src/normalize.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "^4.4.1",
+    "@gltf-transform/extensions": "^4.4.1",
+    "@gltf-transform/functions": "^4.4.1",
+    "meshoptimizer": "^1.2.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@gltf-transform/cli": "^4.4.1"
+  }
+}

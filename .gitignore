@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.turbo/
+*.tsbuildinfo
+.DS_Store
+
+# Corpus de démonstration : on COMMITTE les artefacts world.json et la galerie
+# index.json (fixture de régression FR-026, PRD §31.1), mais on IGNORE les blobs
+# files/ — copies déterministes des sources, potentiellement volumineuses et hors
+# FR-026 (cf. write.ts). Ils se régénèrent par « pnpm corpus:build ».
+apps/client/public/worlds/*/files/

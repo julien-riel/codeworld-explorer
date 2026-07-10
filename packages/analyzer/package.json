@@ -1,0 +1,19 @@
+{
+  "name": "@codeworld/analyzer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "codeworld": "./dist/cli.js"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@codeworld/world-schema": "workspace:*",
+    "commander": "^15.0.0",
+    "picocolors": "^1.1.1"
+  }
+}

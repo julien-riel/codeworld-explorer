@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 0,
+  "worlds": [
+    {
+      "name": "schema",
+      "path": "schema",
+      "world": "schema/world.json",
+      "nodes": 67,
+      "rooms": 6,
+      "files": 59,
+      "artifactBytes": 37787
+    },
+    {
+      "name": "self",
+      "path": "self",
+      "world": "self/world.json",
+      "nodes": 251,
+      "rooms": 36,
+      "files": 199,
+      "artifactBytes": 151180
+    },
+    {
+      "name": "zod",
+      "path": "zod",
+      "world": "zod/world.json",
+      "nodes": 748,
+      "rooms": 32,
+      "files": 563,
+      "artifactBytes": 409784
+    }
+  ]
+}

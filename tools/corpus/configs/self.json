@@ -1,0 +1,9 @@
+{
+  "layoutSeed": "codeworld",
+  "repository": {
+    "owner": "codeworld",
+    "name": "codeworld-explorer",
+    "url": "https://github.com/codeworld/codeworld-explorer"
+  },
+  "exclude": ["apps/client/public/worlds"]
+}

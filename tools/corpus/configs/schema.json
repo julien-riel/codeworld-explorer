@@ -1,0 +1,8 @@
+{
+  "layoutSeed": "codeworld",
+  "repository": {
+    "owner": "codeworld",
+    "name": "world-schema",
+    "url": "https://github.com/codeworld/codeworld-explorer"
+  }
+}

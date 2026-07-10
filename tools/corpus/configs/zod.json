@@ -1,0 +1,9 @@
+{
+  "layoutSeed": "codeworld",
+  "repository": {
+    "owner": "colinhacks",
+    "name": "zod",
+    "url": "https://github.com/colinhacks/zod",
+    "license": "MIT"
+  }
+}

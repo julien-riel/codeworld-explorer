@@ -1,0 +1,139 @@
+/*
+ * Mini-carte (PRD §9.3, §14.3, §23.1). Feuille dédiée pour ne pas alourdir hud.css.
+ * Couleurs via var(--cw-*) uniquement (posées sur .cw-hud). RÈGLE DURE : jamais d'info
+ * par la seule couleur — chaque état de salle porte aussi une forme, un libellé ou une
+ * icône côté markup (courante = « vous êtes ici », visitée = liseré, favori = étoile).
+ */
+
+.cw-minimap {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  z-index: 1;
+}
+
+.cw-minimap-panel {
+  background: var(--cw-surface);
+  border: 1px solid var(--cw-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cw-minimap-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--cw-text-muted);
+}
+
+/* Zone de tracé : conteneur relatif où sont posées les salles et le marqueur joueur. */
+.cw-minimap-map {
+  position: relative;
+  background: var(--cw-void);
+  border: 1px solid var(--cw-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Salle cliquable : rectangle positionné en absolu par la projection mm→2D. */
+.cw-room {
+  position: absolute;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--cw-border);
+  background: color-mix(in srgb, var(--cw-surface-raised) 70%, transparent);
+  border-radius: 2px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.cw-room:hover {
+  border-color: var(--cw-accent);
+  background: color-mix(in srgb, var(--cw-accent) 30%, transparent);
+}
+/* Visitée : liseré plus net (le liseré EST le signal, pas seulement la couleur). */
+.cw-room-visited {
+  border-color: var(--cw-accent-muted);
+  border-width: 2px;
+  background: color-mix(in srgb, var(--cw-accent-muted) 28%, transparent);
+}
+/* Courante : aplat d'accent + point central (doublé du libellé « vous êtes ici »). */
+.cw-room-current {
+  border-color: var(--cw-accent);
+  border-width: 2px;
+  background: var(--cw-accent);
+}
+
+/* Marqueur du joueur : petit triangle orienté selon le lacet, non interactif. */
+.cw-player {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 10px solid var(--cw-focus);
+  pointer-events: none;
+  /* `translate(-50%, -50%)` recentre la pointe ; la rotation vient de la pose caméra. */
+  transform-origin: 50% 50%;
+  will-change: transform;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+}
+
+/* Légende : chaque état est nommé (accessibilité, PRD §23). */
+.cw-minimap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 11px;
+  color: var(--cw-text-muted);
+}
+.cw-minimap-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.cw-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid var(--cw-border);
+  display: inline-block;
+}
+
+.cw-minimap-hint {
+  font-size: 11px;
+  color: var(--cw-warning);
+  max-width: 232px;
+  line-height: 1.35;
+}
+
+/* Pulsation discrète de la salle courante, supprimée en mouvement réduit (PRD §23.2). */
+.cw-room-pulse {
+  animation: cw-room-pulse 1.8s ease-in-out infinite;
+}
+@keyframes cw-room-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--cw-accent) 60%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--cw-accent) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cw-room-pulse {
+    animation: none;
+  }
+}
