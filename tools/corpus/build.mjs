@@ -29,7 +29,9 @@ function analyzeWorld(world, outDir) {
   const worldDir = join(outDir, world.name);
   // Repartir d'un état propre : une régénération ne laisse jamais de résidu.
   rmSync(worldDir, { recursive: true, force: true });
-  const args = ["analyze", world.source, "--out", worldDir, "--config", world.config];
+  // Corpus committé : pas de sidecar de provenance (heure réelle, hors FR-026) ni de
+  // journal par étape (bruit lors d'une régénération en lot).
+  const args = ["analyze", world.source, "--out", worldDir, "--config", world.config, "--quiet", "--no-provenance"];
   execFileSync(process.execPath, [ANALYZER_CLI, ...args], { stdio: ["ignore", "ignore", "inherit"] });
   return worldDir;
 }

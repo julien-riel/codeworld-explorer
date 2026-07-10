@@ -10,7 +10,7 @@
  * (ADR-0002) ; les blobs `files/` sont hors FR-026 (copies déterministes des sources).
  */
 
-import { canonicalBytes, type World } from "@codeworld/world-schema";
+import { canonicalBytes, sha256Hex, type World } from "@codeworld/world-schema";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -19,6 +19,8 @@ export interface WriteResult {
   readonly worldPath: string;
   readonly worldBytes: number;
   readonly fileCount: number;
+  /** Empreinte sha256 hex des octets de `world.json` (pour la provenance §10.4). */
+  readonly worldSha256: string;
 }
 
 /**
@@ -35,6 +37,7 @@ export async function writeWorld(
   const worldBytes = canonicalBytes(world);
   const worldPath = join(outDir, "world.json");
   await writeFile(worldPath, worldBytes);
+  const worldSha256 = sha256Hex(worldBytes);
 
   const filesDir = join(outDir, "files");
   await mkdir(filesDir, { recursive: true });
@@ -45,5 +48,5 @@ export async function writeWorld(
     await writeFile(join(filesDir, hash), bytes);
   }
 
-  return { worldPath, worldBytes: worldBytes.length, fileCount: files.size };
+  return { worldPath, worldBytes: worldBytes.length, fileCount: files.size, worldSha256 };
 }

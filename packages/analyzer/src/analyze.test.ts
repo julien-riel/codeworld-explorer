@@ -20,6 +20,7 @@ import { analyze } from "./pipeline.js";
 import { writeWorld } from "./write.js";
 import { parseConfigJson } from "./config.js";
 import { nodeFsPort, type FsPort } from "./inventory.js";
+import { createMemoryCache } from "./cache.js";
 import { AnalysisLimitError, OutgoingSymlinkError } from "./errors.js";
 import { MAX_INVENTORY_NODES } from "./exclusions.js";
 
@@ -191,6 +192,28 @@ describe("FR-026 — reproductibilité octet pour octet", () => {
       const c2 = await readFile(join(w2, "files", name));
       expect(c1.equals(c2)).toBe(true);
     }
+  });
+});
+
+describe("cache par hash de contenu — chaud == froid, octet pour octet", () => {
+  it("un cache partagé produit un artefact identique et bascule les défauts en hits", async () => {
+    const cache = createMemoryCache();
+
+    // Premier passage : cache FROID → uniquement des défauts (misses), aucun hit.
+    const cold = await analyze(root, { cache });
+    expect(cold.stats.cache.misses).toBeGreaterThan(0);
+    expect(cold.stats.cache.hits).toBe(0);
+
+    // Deuxième passage sur le MÊME cache : cache CHAUD → uniquement des hits.
+    const warm = await analyze(root, { cache });
+    expect(warm.stats.cache.hits).toBeGreaterThan(0);
+    expect(warm.stats.cache.misses).toBe(0);
+
+    // Et une analyse SANS cache. Les trois artefacts doivent coïncider (FR-026 : le cache
+    // ne mémoïse qu'une fonction pure ; il ne peut pas changer un octet de l'artefact).
+    const none = await analyze(root, {});
+    expect(canonicalStringify(warm.world)).toBe(canonicalStringify(cold.world));
+    expect(canonicalStringify(none.world)).toBe(canonicalStringify(cold.world));
   });
 });
 

@@ -30,7 +30,39 @@ tout ce qui est en amont est le pipeline, tout ce qui est en aval est le client.
 | `pnpm test` | Tests Vitest. |
 | `pnpm build` | Build de chaque paquet. |
 | `pnpm ci` | Enchaîne lint, typecheck, test et build. |
+| `pnpm corpus:build` | Régénère le corpus de démonstration servi au client. |
+| `pnpm corpus:check` | Vérifie la reproductibilité FR-026 par double régénération. |
 | `pnpm --filter @codeworld/client dev` | Démarre le client en développement. |
+
+## Analyser un dépôt (`codeworld analyze`)
+
+Après `pnpm --filter @codeworld/analyzer build`, le CLI `codeworld` produit un `world.json`
+à partir d'un **chemin local** ou d'une **URL GitHub publique** — « une commande → un monde » :
+
+```sh
+# Dépôt GitHub public : clone superficiel du commit, métadonnées via l'API, analyse.
+node packages/analyzer/dist/cli.js analyze https://github.com/owner/repo --out ./monde
+
+# Arborescence locale déjà présente sur disque.
+node packages/analyzer/dist/cli.js analyze ./chemin/vers/depot --out ./monde
+```
+
+| Option | Effet |
+|---|---|
+| `-o, --out <dir>` | Répertoire de sortie (`world.json` + `files/` + `world.build.json`). |
+| `-c, --config <file>` | Configuration JSON (métadonnées, exclusions, classification). |
+| `-s, --seed <seed>` | Graine de layout (surcharge la configuration). |
+| `-r, --ref <branche\|tag>` | Référence à cloner (URL GitHub ; défaut : branche par défaut). |
+| `--cache <dir>` | Active le cache par hash de contenu (analyse statique incrémentale). |
+| `--no-provenance` | N'écrit pas le sidecar `world.build.json`. |
+| `-q, --quiet` | N'émet pas le journal de progression par étape. |
+
+- Un `GITHUB_TOKEN` (ou `GH_TOKEN`) dans l'environnement relève la limite de taux de l'API
+  et n'est jamais écrit dans l'artefact. Sans jeton, l'analyse fonctionne (licence `null`
+  si l'API est indisponible) : seul le clone est bloquant.
+- `world.json` est reproductible **octet pour octet** pour un même commit et une même
+  configuration (FR-026). Le sidecar `world.build.json` porte l'heure réelle et les durées
+  par étape : il est **hors** FR-026, git-ignoré, jamais lu par le client.
 
 ## Conventions
 

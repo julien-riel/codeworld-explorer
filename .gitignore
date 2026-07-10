@@ -10,3 +10,7 @@ coverage/
 # files/ — copies déterministes des sources, potentiellement volumineuses et hors
 # FR-026 (cf. write.ts). Ils se régénèrent par « pnpm corpus:build ».
 apps/client/public/worlds/*/files/
+
+# Sidecar de provenance : contient l'heure réelle d'exécution (hors FR-026, spec §10.4),
+# jamais lu par le client. Best-effort, jamais committé (cf. provenance.ts).
+world.build.json

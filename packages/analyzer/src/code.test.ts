@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { beforeAll, describe, it, expect } from "vitest";
 import { canonicalStringify, nodeId, sha256Hex, symbolId, type SourceNode } from "@codeworld/world-schema";
 import { extractCode } from "./code.js";
 import { detectLanguage } from "./language.js";
@@ -80,7 +80,10 @@ const CONTENTS = new Map<string, Uint8Array>([
 const HL = 16; // idHashLength par défaut
 
 describe("extractCode — symboles top-level", () => {
-  const { symbols } = extractCode(NODES, CONTENTS, HL);
+  let symbols: Awaited<ReturnType<typeof extractCode>>["symbols"];
+  beforeAll(async () => {
+    symbols = (await extractCode(NODES, CONTENTS, HL)).symbols;
+  });
 
   const find = (nodeIdStr: string, name: string) =>
     symbols.find((s) => s.sourceNodeId === nodeIdStr && s.name === name);
@@ -132,7 +135,10 @@ describe("extractCode — symboles top-level", () => {
 });
 
 describe("extractCode — relations d'import (node→node)", () => {
-  const { relations } = extractCode(NODES, CONTENTS, HL);
+  let relations: Awaited<ReturnType<typeof extractCode>>["relations"];
+  beforeAll(async () => {
+    relations = (await extractCode(NODES, CONTENTS, HL)).relations;
+  });
 
   const edge = (src: string, dst: string) =>
     relations.find((r) => r.sourceRef.id === src && r.targetRef.id === dst);
@@ -165,25 +171,25 @@ describe("extractCode — relations d'import (node→node)", () => {
 });
 
 describe("extractCode — index et déterminisme", () => {
-  it("symbolsByNodeId : noms triés et dédupliqués par fichier", () => {
-    const { symbolsByNodeId } = extractCode(NODES, CONTENTS, HL);
+  it("symbolsByNodeId : noms triés et dédupliqués par fichier", async () => {
+    const { symbolsByNodeId } = await extractCode(NODES, CONTENTS, HL);
     expect(symbolsByNodeId.get(A.node.id)).toEqual(["Shape", "bar", "foo", "internal"]);
   });
 
-  it("FR-026 : deux exécutions produisent des symboles/relations identiques", () => {
-    const r1 = extractCode(NODES, CONTENTS, HL);
-    const r2 = extractCode(NODES, CONTENTS, HL);
+  it("FR-026 : deux exécutions produisent des symboles/relations identiques", async () => {
+    const r1 = await extractCode(NODES, CONTENTS, HL);
+    const r2 = await extractCode(NODES, CONTENTS, HL);
     expect(canonicalStringify({ symbols: r1.symbols, relations: r1.relations })).toBe(
       canonicalStringify({ symbols: r2.symbols, relations: r2.relations }),
     );
   });
 
-  it("un fichier de code sans symbole n'apparaît pas dans l'index", () => {
+  it("un fichier de code sans symbole n'apparaît pas dans l'index", async () => {
     const empty = fileNode("src/empty.ts", "// juste un commentaire\n");
     const nodes = [...NODES, empty.node];
     const contents = new Map(CONTENTS);
     contents.set(empty.hash, empty.bytes);
-    const { symbolsByNodeId } = extractCode(nodes, contents, HL);
+    const { symbolsByNodeId } = await extractCode(nodes, contents, HL);
     expect(symbolsByNodeId.has(empty.node.id)).toBe(false);
   });
 });

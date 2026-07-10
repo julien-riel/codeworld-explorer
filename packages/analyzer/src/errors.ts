@@ -72,3 +72,29 @@ export class ConfigError extends AnalyzeError {
     this.name = "ConfigError";
   }
 }
+
+/**
+ * L'argument d'analyse ressemble à une URL de dépôt mais n'est pas une URL GitHub
+ * publique reconnue (schéma, hôte ou forme `owner/repo` invalide). Au MVP, seul
+ * GitHub public est cloné (PRD §21.1) ; les autres hôtes sont refusés explicitement.
+ */
+export class InvalidRepoUrlError extends AnalyzeError {
+  readonly code = "invalid-repo-url";
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidRepoUrlError";
+  }
+}
+
+/**
+ * Le clone superficiel a échoué (dépôt inexistant, réseau, `git` absent…). Le
+ * message conserve la cause `git` sans exposer d'identifiants (le port de clone
+ * neutralise les invites d'authentification, §22.2).
+ */
+export class GitCloneError extends AnalyzeError {
+  readonly code = "git-clone-failed";
+  constructor(message: string) {
+    super(message);
+    this.name = "GitCloneError";
+  }
+}

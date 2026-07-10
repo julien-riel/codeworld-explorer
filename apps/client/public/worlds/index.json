@@ -14,10 +14,10 @@
       "name": "self",
       "path": "self",
       "world": "self/world.json",
-      "nodes": 259,
+      "nodes": 272,
       "rooms": 36,
-      "files": 206,
-      "artifactBytes": 445865
+      "files": 219,
+      "artifactBytes": 472949
     },
     {
       "name": "zod",

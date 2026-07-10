@@ -41,6 +41,8 @@ import { inventory, nodeFsPort, type FsPort } from "./inventory.js";
 import { classifyDirectory } from "./classify.js";
 import { extractCode } from "./code.js";
 import { buildSearchIndex } from "./search.js";
+import { ParseCache, type CachePort, type ParseCacheStats } from "./cache.js";
+import { NOOP_REPORTER, type ProgressReporter } from "./progress.js";
 import { IdCollisionError, InvalidRootError } from "./errors.js";
 
 /** Statistiques d'exécution, pour le journal du CLI (hors artefact, FR-026). */
@@ -54,6 +56,7 @@ export interface AnalyzeStats {
   readonly symbols: number;
   readonly relations: number;
   readonly parsedFiles: number;
+  readonly cache: ParseCacheStats;
 }
 
 /** Produit du pipeline : l'artefact validé, les contenus, les avertissements, les stats. */
@@ -64,10 +67,14 @@ export interface AnalyzeResult {
   readonly stats: AnalyzeStats;
 }
 
-/** Options d'analyse : configuration facultative et port fs injectable (tests). */
+/** Options d'analyse : configuration, port fs injectable (tests), cache et journal. */
 export interface AnalyzeOptions {
   readonly config?: FileConfig;
   readonly fs?: FsPort;
+  /** Cache par hash de contenu pour l'analyse statique incrémentale ; absent ⇒ désactivé. */
+  readonly cache?: CachePort;
+  /** Journal de progression par étape ; absent ⇒ muet (pipeline pur et silencieux). */
+  readonly progress?: ProgressReporter;
 }
 
 /** Assemble un `LayoutTree` à partir des nœuds NON exclus (contrat §3.5.2). */
@@ -130,6 +137,8 @@ function assertNoIdCollision(nodes: readonly SourceNode[]): void {
  */
 export async function analyze(rootPath: string, options: AnalyzeOptions = {}): Promise<AnalyzeResult> {
   const fs = options.fs ?? nodeFsPort;
+  const progress = options.progress ?? NOOP_REPORTER;
+  const parseCache = new ParseCache(options.cache);
 
   // Nom de dépôt par défaut = nom de base du chemin réel de la racine (normalisé plus bas).
   let canonicalRoot: string;
@@ -146,10 +155,13 @@ export async function analyze(rootPath: string, options: AnalyzeOptions = {}): P
   const config = resolveConfig(options.config, repoName);
 
   // 1-3. Inventaire trié, exclusions, langage.
+  progress.start("inventory");
   const { nodes, fileContents, warnings, stats } = await inventory(canonicalRoot, config, fs);
   assertNoIdCollision(nodes);
+  progress.done("inventory", `${String(nodes.length)} nœuds, ${String(stats.analyzed)} analysés`);
 
   // 4. Classification des dossiers NON exclus (contrat §3.6).
+  progress.start("classify");
   const classifications: Classification[] = [];
   const categoryByDirId = new Map<string, Category>();
   for (const node of nodes) {
@@ -161,17 +173,29 @@ export async function analyze(rootPath: string, options: AnalyzeOptions = {}): P
   classifications.sort((a, b) =>
     a.sourceNodeId < b.sourceNodeId ? -1 : a.sourceNodeId > b.sourceNodeId ? 1 : 0,
   );
+  progress.done("classify", `${String(classifications.length)} dossiers`);
 
   // 5. Layout (fonction pure du contrat ; `computeLayout` asserte déjà ses invariants).
+  progress.start("layout");
   const tree = buildLayoutTree(nodes);
   const layout = computeLayout(tree, categoryByDirId, config.layoutSeed, DEFAULT_LAYOUT_OPTIONS);
+  progress.done("layout", `${String(layout.spatialNodes.length)} salles`);
 
   // 6. Analyse statique du code (symboles + relations d'import, sprint 5). Étape PURE :
-  //    projet ts-morph en mémoire depuis `fileContents`, aucune résolution externe.
-  const code = extractCode(nodes, fileContents, config.idHashLength);
+  //    projet ts-morph en mémoire depuis `fileContents`, aucune résolution externe. Le
+  //    cache (si branché) mémoïse les faits bruts par hash de contenu.
+  progress.start("analyze-code");
+  const code = await extractCode(nodes, fileContents, config.idHashLength, parseCache);
+  progress.done(
+    "analyze-code",
+    `${String(code.symbols.length)} symboles, ${String(code.relations.length)} relations` +
+      (parseCache.enabled ? `, cache ${String(code.stats.cache.hits)}✓/${String(code.stats.cache.misses)}✗` : ""),
+  );
 
   // 7. Index de recherche (couverture totale, bijection), enrichi des noms de symboles.
+  progress.start("search");
   const search = buildSearchIndex(nodes, categoryByDirId, code.symbolsByNodeId);
+  progress.done("search", `${String(search.documents.length)} documents`);
 
   // Assemblage de l'artefact. `symbols`/`relations` sont TOUJOURS présents en v1
   // (vides si le dépôt n'a aucun code analysable), comme les collections v0 (§2.3).
@@ -204,13 +228,17 @@ export async function analyze(rootPath: string, options: AnalyzeOptions = {}): P
   };
 
   // 8. GARDES avant tout retour/écriture : un artefact non conforme n'existe pas.
+  progress.start("guards");
   assertTreeInvariants(nodes, config.idHashLength);
   assertLayoutInvariants(layout, tree, DEFAULT_LAYOUT_OPTIONS);
   assertSymbolInvariants(code.symbols, nodes, config.idHashLength);
   assertRelationInvariants(code.relations, nodes, code.symbols);
+  progress.done("guards");
 
   // 9. Validation Zod (forme du contrat §3, garde conditionnelle des entités §3.9).
+  progress.start("validate");
   const validated = parseWorld(world);
+  progress.done("validate");
 
   return {
     world: validated,
@@ -226,6 +254,7 @@ export async function analyze(rootPath: string, options: AnalyzeOptions = {}): P
       symbols: code.symbols.length,
       relations: code.relations.length,
       parsedFiles: code.stats.parsedFiles,
+      cache: code.stats.cache,
     },
   };
 }

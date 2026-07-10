@@ -16,6 +16,17 @@
 import { posix } from "node:path";
 import { compareEvidence, type Evidence, type Relation, type RelationType } from "@codeworld/world-schema";
 
+/**
+ * Spécificateur d'import/re-export tel qu'extrait de l'AST : la chaîne littérale et le
+ * type de relation, indépendants du dépôt. C'est la forme mémoïsée par le cache (cache.ts)
+ * et l'entrée de `extractFileRelations`, dont la RÉSOLUTION (contre les chemins du dépôt)
+ * reste faite à chaque exécution.
+ */
+export interface ImportSpec {
+  readonly specifier: string;
+  readonly relationType: RelationType;
+}
+
 /** Extensions de code, dans l'ordre d'essai (TS avant JS, comme la résolution TS). */
 const CODE_EXTENSIONS = ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"] as const;
 
@@ -84,7 +95,7 @@ interface Edge {
  * `nodeIdByPath` associe un chemin de fichier résolu à l'`id` de son `SourceNode`.
  */
 export function extractFileRelations(
-  imports: readonly { specifier: string; relationType: RelationType }[],
+  imports: readonly ImportSpec[],
   fromPath: string,
   sourceNodeId: string,
   filePaths: ReadonlySet<string>,
