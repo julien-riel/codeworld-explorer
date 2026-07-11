@@ -83,13 +83,14 @@ Le lot A est le chemin critique du démarrage : B et C en dépendent tous deux. 
 ### Sprint 6 — Classification et déterminisme
 
 - Couches 1 à 3 de classification : configuration YAML, règles déterministes, heuristiques d'analyse statique; scores et preuves dans l'artefact.
-- Couche 4 : classification LLM des cas ambigus, température 0, modèle épinglé, cache de verdicts committé (PRD 12.6).
+- Couche 4 (classification LLM des cas ambigus) **reportée au sprint 7** avec la couche sémantique, seule dépendance IA (décision ADR-0006). L'infrastructure reste prête : `decisionSource: "ai"` et l'emplacement `ai` du hash de config sont réservés.
 - Tests de reproductibilité : deux exécutions → artefacts identiques (FR-026); refus propre des schémas inconnus côté client (FR-027).
 - Mapping catégorie → thème branché; taxonomie complète avec repli `unknown`.
-- **Livrable :** classification correcte à vue d'œil sur 5 dépôts variés, verdicts IA visibles en revue de code.
+- **Livrable :** classification correcte à vue d'œil sur 5 dépôts variés (couches 1-3, sources de décision visibles en revue de code).
 
 ### Sprint 7 — Couche sémantique
 
+- Couche 4 de classification (reportée du sprint 6, ADR-0006) : classification LLM des cas ambigus, température 0, modèle épinglé, cache de verdicts committé (PRD 12.6); vérification effective de FR-028.
 - Résumés IA en lot : dépôt, dossiers, fichiers; citations de sources; invalidation par commit; étape entièrement facultative (artefact valide sans elle).
 - Visite guidée générée : 3 à 7 arrêts depuis README, points d'entrée et classifications; navigation séquentielle dans le client, pause et sortie libre.
 - Index de recherche enrichi : symboles exportés, filtres par catégorie et type.
@@ -161,7 +162,7 @@ Schéma v0 + layout (S1) ──► Client explorable (S1–S2) ──► Anti-fr
 | J3 — Anti-friction | S3 | Règles 9.4 vérifiées, 3 thèmes instanciés |
 | **J4 — GO/NO-GO** | S4 | Rapport de test comparatif et décision |
 | J5 — Pipeline autonome | S5 | Une commande → un monde |
-| J6 — Classification reproductible | S6 | FR-026/028 vérifiées sur 5 dépôts |
+| J6 — Classification reproductible | S6 | FR-026 vérifiée sur 5 dépôts (couches 1-3); FR-028 au S7 avec la couche 4 |
 | J7 — Couche sémantique | S7 | Visite guidée + résumés sourcés |
 | J8 — Produit complet | S8 | Utilisable sans accompagnement |
 | **J9 — Pilote** | S9 | Rapport pilote vs critères PRD 24.3 |

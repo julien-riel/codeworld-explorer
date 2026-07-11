@@ -1,0 +1,9 @@
+{
+  "layoutSeed": "codeworld",
+  "repository": {
+    "owner": "codeworld",
+    "name": "nest-shop",
+    "url": "https://github.com/codeworld/nest-shop",
+    "license": "MIT"
+  }
+}

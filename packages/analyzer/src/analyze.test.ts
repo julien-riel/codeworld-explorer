@@ -402,3 +402,103 @@ describe("conflit de normalisation Unicode entre frères (checkout Linux/ext4)",
     expect(result.warnings.some((w) => w.includes("normalisation Unicode"))).toBe(true);
   });
 });
+
+describe("classification — couche 3 (heuristiques statiques)", () => {
+  it("classe un dossier au nom neutre d'après le contenu de ses fichiers", async () => {
+    // « gateway » n'est dans aucune règle de nom : les couches 1-2 laissent « unknown ».
+    // La couche 3 lit les fichiers « *.controller.ts » et la classe « controller ».
+    const s = await mkdtemp(join(tmpdir(), "cwx-l3-"));
+    const r = join(s, "repo");
+    await mkdir(join(r, "src", "gateway"), { recursive: true });
+    await writeFile(join(r, "README.md"), "# L3\n");
+    await writeFile(
+      join(r, "src", "gateway", "orders.controller.ts"),
+      'import { Controller } from "@nestjs/common";\nexport class OrdersController {}\n',
+    );
+    await writeFile(
+      join(r, "src", "gateway", "users.controller.ts"),
+      'import { Controller } from "@nestjs/common";\nexport class UsersController {}\n',
+    );
+    try {
+      const result = await analyze(r, {});
+      const dir = result.world.nodes.find((n) => n.path === "src/gateway");
+      const cls = result.world.classifications.find((c) => c.sourceNodeId === dir?.id);
+      expect(cls?.category).toBe("controller");
+      expect(cls?.decisionSource).toBe("static");
+      expect(cls?.confidence).toBeGreaterThanOrEqual(400);
+      expect(cls?.confidence).toBeLessThanOrEqual(850);
+      expect(cls?.evidence.some((e) => e.kind === "file-name")).toBe(true);
+      expect(cls?.overriddenByConfig).toBe(false);
+      expect(() => parseWorld(result.world)).not.toThrow();
+      expect(result.stats.staticClassifications).toBeGreaterThanOrEqual(1);
+    } finally {
+      await rm(s, { recursive: true, force: true });
+    }
+  });
+
+  it("la couche 1 (config) prime sur un verdict de couche 3", async () => {
+    const s = await mkdtemp(join(tmpdir(), "cwx-l3c-"));
+    const r = join(s, "repo");
+    await mkdir(join(r, "src", "gateway"), { recursive: true });
+    await writeFile(join(r, "README.md"), "# L3\n");
+    await writeFile(join(r, "src", "gateway", "x.controller.ts"), "export class XController {}\n");
+    try {
+      const folderNames = new Map<string, Category>([["gateway", "documentation"]]);
+      const result = await analyze(r, { config: { classificationFolderNames: folderNames } });
+      const dir = result.world.nodes.find((n) => n.path === "src/gateway");
+      const cls = result.world.classifications.find((c) => c.sourceNodeId === dir?.id);
+      expect(cls?.category).toBe("documentation");
+      expect(cls?.decisionSource).toBe("config");
+      expect(cls?.overriddenByConfig).toBe(true);
+    } finally {
+      await rm(s, { recursive: true, force: true });
+    }
+  });
+
+  it("les verdicts de couche 3 sont reproductibles octet pour octet (FR-026), cache froid == chaud", async () => {
+    // Deux dossiers au nom neutre classés par heuristique : « gateway » (controllers) et
+    // « panels » (composants React). L'artefact doit être identique au bit près sur deux
+    // exécutions, et un cache chaud ne peut pas changer un octet (le cache est pur).
+    const s = await mkdtemp(join(tmpdir(), "cwx-l3d-"));
+    const r = join(s, "repo");
+    await mkdir(join(r, "src", "gateway"), { recursive: true });
+    await mkdir(join(r, "src", "panels"), { recursive: true });
+    await writeFile(join(r, "README.md"), "# L3 déterminisme\n");
+    await writeFile(join(r, "src", "gateway", "orders.controller.ts"), "export class OrdersController {}\n");
+    await writeFile(join(r, "src", "gateway", "users.controller.ts"), "export class UsersController {}\n");
+    await writeFile(
+      join(r, "src", "panels", "Chart.tsx"),
+      'import { useState } from "react";\nexport const Chart = () => useState(0);\n',
+    );
+    try {
+      const catOf = (world: Awaited<ReturnType<typeof analyze>>["world"], path: string): string | undefined => {
+        const dir = world.nodes.find((n) => n.path === path);
+        return world.classifications.find((c) => c.sourceNodeId === dir?.id)?.category;
+      };
+
+      const cache = createMemoryCache();
+      const cold = await analyze(r, { cache }); // cache froid
+      const warm = await analyze(r, { cache }); // cache chaud
+      const none = await analyze(r, {}); // sans cache
+
+      // Les heuristiques ont bien statué sur les deux dossiers neutres.
+      expect(catOf(cold.world, "src/gateway")).toBe("controller");
+      expect(catOf(cold.world, "src/panels")).toBe("ui");
+
+      // Reproductibilité : les trois artefacts coïncident au canonical près…
+      expect(canonicalStringify(warm.world)).toBe(canonicalStringify(cold.world));
+      expect(canonicalStringify(none.world)).toBe(canonicalStringify(cold.world));
+
+      // …et octet pour octet une fois écrits.
+      const a = join(s, "a");
+      const b = join(s, "b");
+      await writeWorld(a, cold.world, cold.files);
+      await writeWorld(b, warm.world, warm.files);
+      const ba = await readFile(join(a, "world.json"));
+      const bb = await readFile(join(b, "world.json"));
+      expect(ba.equals(bb)).toBe(true);
+    } finally {
+      await rm(s, { recursive: true, force: true });
+    }
+  });
+});

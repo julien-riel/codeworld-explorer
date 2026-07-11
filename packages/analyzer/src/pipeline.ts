@@ -32,13 +32,15 @@ import {
   type LayoutFile,
   type LayoutTree,
   type SourceNode,
+  type Symbol,
   type World,
 } from "@codeworld/world-schema";
 import { basename } from "node:path";
 import { ANALYZER_VERSION } from "./version.js";
 import { resolveConfig, type FileConfig } from "./config.js";
 import { inventory, nodeFsPort, type FsPort } from "./inventory.js";
-import { classifyDirectory } from "./classify.js";
+import { classifyDirectory, isUnknownFallback } from "./classify.js";
+import { classifyDirectoryStatic, type StaticFileProfile, type StaticSymbol } from "./classify-static.js";
 import { extractCode } from "./code.js";
 import { buildSearchIndex } from "./search.js";
 import { ParseCache, type CachePort, type ParseCacheStats } from "./cache.js";
@@ -53,6 +55,8 @@ export interface AnalyzeStats {
   readonly directories: number;
   readonly rooms: number;
   readonly classifications: number;
+  /** Nombre de dossiers classés par la couche 3 (heuristiques statiques), sous-ensemble. */
+  readonly staticClassifications: number;
   readonly symbols: number;
   readonly relations: number;
   readonly parsedFiles: number;
@@ -121,6 +125,38 @@ function buildLayoutTree(nodes: readonly SourceNode[]): LayoutTree {
   return { root: buildDir(root) };
 }
 
+/** Langages de code dont les fichiers alimentent les heuristiques de la couche 3. */
+const CODE_LANGUAGES: ReadonlySet<string> = new Set(["TypeScript", "TSX", "JavaScript", "JSX"]);
+
+/** Regroupe les symboles (déjà triés) par `sourceNodeId`, en préservant l'ordre canonique. */
+function groupSymbolsByNode(symbols: readonly Symbol[]): Map<string, StaticSymbol[]> {
+  const byNode = new Map<string, StaticSymbol[]>();
+  for (const s of symbols) {
+    const item: StaticSymbol = { name: s.name, symbolType: s.symbolType, exported: s.exported };
+    const arr = byNode.get(s.sourceNodeId);
+    if (arr === undefined) byNode.set(s.sourceNodeId, [item]);
+    else arr.push(item);
+  }
+  return byNode;
+}
+
+/**
+ * Regroupe les fichiers de CODE non exclus par `parentId` (dossier), dans l'ordre d'arbre
+ * figé de l'inventaire. Seuls ces fichiers directs alimentent la couche 3 d'un dossier :
+ * une classification par contenu direct est plus précise qu'une agrégation récursive.
+ */
+function groupChildCodeFiles(nodes: readonly SourceNode[]): Map<string, SourceNode[]> {
+  const byParent = new Map<string, SourceNode[]>();
+  for (const n of nodes) {
+    if (n.nodeType !== "file" || n.excludedReason !== undefined || n.parentId === null) continue;
+    if (n.language === undefined || !CODE_LANGUAGES.has(n.language)) continue;
+    const arr = byParent.get(n.parentId);
+    if (arr === undefined) byParent.set(n.parentId, [n]);
+    else arr.push(n);
+  }
+  return byParent;
+}
+
 /** Vérifie l'unicité globale des `id` (contrat §4.3) ; lève `IdCollisionError` sinon. */
 function assertNoIdCollision(nodes: readonly SourceNode[]): void {
   const byId = new Map<string, string>();
@@ -160,30 +196,10 @@ export async function analyze(rootPath: string, options: AnalyzeOptions = {}): P
   assertNoIdCollision(nodes);
   progress.done("inventory", `${String(nodes.length)} nœuds, ${String(stats.analyzed)} analysés`);
 
-  // 4. Classification des dossiers NON exclus (contrat §3.6).
-  progress.start("classify");
-  const classifications: Classification[] = [];
-  const categoryByDirId = new Map<string, Category>();
-  for (const node of nodes) {
-    if (node.nodeType !== "directory" || node.excludedReason !== undefined) continue;
-    const classification = classifyDirectory(node, config);
-    classifications.push(classification);
-    categoryByDirId.set(node.id, classification.category);
-  }
-  classifications.sort((a, b) =>
-    a.sourceNodeId < b.sourceNodeId ? -1 : a.sourceNodeId > b.sourceNodeId ? 1 : 0,
-  );
-  progress.done("classify", `${String(classifications.length)} dossiers`);
-
-  // 5. Layout (fonction pure du contrat ; `computeLayout` asserte déjà ses invariants).
-  progress.start("layout");
-  const tree = buildLayoutTree(nodes);
-  const layout = computeLayout(tree, categoryByDirId, config.layoutSeed, DEFAULT_LAYOUT_OPTIONS);
-  progress.done("layout", `${String(layout.spatialNodes.length)} salles`);
-
-  // 6. Analyse statique du code (symboles + relations d'import, sprint 5). Étape PURE :
-  //    projet ts-morph en mémoire depuis `fileContents`, aucune résolution externe. Le
-  //    cache (si branché) mémoïse les faits bruts par hash de contenu.
+  // 4. Analyse statique du code (symboles + relations d'import, sprint 5). Étape PURE :
+  //    projet ts-morph en mémoire depuis `fileContents`, aucune résolution externe. Le cache
+  //    (si branché) mémoïse les faits bruts par hash de contenu. Exécutée AVANT la
+  //    classification : la couche 3 (heuristiques statiques) consomme symboles et imports.
   progress.start("analyze-code");
   const code = await extractCode(nodes, fileContents, config.idHashLength, parseCache);
   progress.done(
@@ -191,6 +207,53 @@ export async function analyze(rootPath: string, options: AnalyzeOptions = {}): P
     `${String(code.symbols.length)} symboles, ${String(code.relations.length)} relations` +
       (parseCache.enabled ? `, cache ${String(code.stats.cache.hits)}✓/${String(code.stats.cache.misses)}✗` : ""),
   );
+
+  // 5. Classification des dossiers NON exclus (contrat §3.6). Couches 1-2 déterministes
+  //    (classify.ts), puis — sur le SEUL repli `unknown` — couche 3 d'heuristiques statiques
+  //    (classify-static.ts) alimentée par les faits de l'étape 4. L'ordre de priorité
+  //    config > règle > statique est ainsi respecté par construction (PRD §12.1).
+  progress.start("classify");
+  const staticSymbolsByNodeId = groupSymbolsByNode(code.symbols);
+  const childCodeFilesByDirId = groupChildCodeFiles(nodes);
+  const classifications: Classification[] = [];
+  const categoryByDirId = new Map<string, Category>();
+  let staticClassifications = 0;
+  for (const node of nodes) {
+    if (node.nodeType !== "directory" || node.excludedReason !== undefined) continue;
+    let classification = classifyDirectory(node, config);
+    if (isUnknownFallback(classification)) {
+      const files = childCodeFilesByDirId.get(node.id);
+      if (files !== undefined) {
+        const profiles: StaticFileProfile[] = files.map((f) => ({
+          name: f.name,
+          language: f.language ?? "",
+          symbols: staticSymbolsByNodeId.get(f.id) ?? [],
+          importModules: code.importsByNodeId.get(f.id) ?? [],
+        }));
+        const staticVerdict = classifyDirectoryStatic(node.id, profiles);
+        if (staticVerdict !== null) {
+          classification = staticVerdict;
+          staticClassifications += 1;
+        }
+      }
+    }
+    classifications.push(classification);
+    categoryByDirId.set(node.id, classification.category);
+  }
+  classifications.sort((a, b) =>
+    a.sourceNodeId < b.sourceNodeId ? -1 : a.sourceNodeId > b.sourceNodeId ? 1 : 0,
+  );
+  progress.done(
+    "classify",
+    `${String(classifications.length)} dossiers` +
+      (staticClassifications > 0 ? `, dont ${String(staticClassifications)} par heuristique` : ""),
+  );
+
+  // 6. Layout (fonction pure du contrat ; `computeLayout` asserte déjà ses invariants).
+  progress.start("layout");
+  const tree = buildLayoutTree(nodes);
+  const layout = computeLayout(tree, categoryByDirId, config.layoutSeed, DEFAULT_LAYOUT_OPTIONS);
+  progress.done("layout", `${String(layout.spatialNodes.length)} salles`);
 
   // 7. Index de recherche (couverture totale, bijection), enrichi des noms de symboles.
   progress.start("search");
@@ -251,6 +314,7 @@ export async function analyze(rootPath: string, options: AnalyzeOptions = {}): P
       directories: stats.directories,
       rooms: layout.spatialNodes.length,
       classifications: classifications.length,
+      staticClassifications,
       symbols: code.symbols.length,
       relations: code.relations.length,
       parsedFiles: code.stats.parsedFiles,

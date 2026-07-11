@@ -160,3 +160,18 @@ export function classifyDirectory(node: SourceNode, config: ResolvedConfig): Cla
     overriddenByConfig: false,
   };
 }
+
+/**
+ * Vrai si une `Classification` est le REPLI des couches 1-2 (aucun verdict config ni règle) :
+ * `unknown`, issue d'une règle, non surchargée par la config. C'est le seul cas où la couche 3
+ * (heuristiques statiques) a le droit d'intervenir — l'ordre de priorité config > règle >
+ * statique interdit d'écraser un verdict config ou règle, y compris un `unknown` posé
+ * EXPLICITEMENT par la configuration (`overriddenByConfig: true`).
+ */
+export function isUnknownFallback(classification: Classification): boolean {
+  return (
+    classification.category === "unknown" &&
+    classification.decisionSource === "rule" &&
+    !classification.overriddenByConfig
+  );
+}

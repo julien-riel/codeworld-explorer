@@ -2,22 +2,40 @@
   "schemaVersion": 0,
   "worlds": [
     {
+      "name": "nest-shop",
+      "path": "nest-shop",
+      "world": "nest-shop/world.json",
+      "nodes": 20,
+      "rooms": 8,
+      "files": 12,
+      "artifactBytes": 20821
+    },
+    {
+      "name": "react-dashboard",
+      "path": "react-dashboard",
+      "world": "react-dashboard/world.json",
+      "nodes": 17,
+      "rooms": 7,
+      "files": 10,
+      "artifactBytes": 14770
+    },
+    {
       "name": "schema",
       "path": "schema",
       "world": "schema/world.json",
       "nodes": 69,
       "rooms": 6,
       "files": 61,
-      "artifactBytes": 139931
+      "artifactBytes": 140820
     },
     {
       "name": "self",
       "path": "self",
       "world": "self/world.json",
-      "nodes": 272,
+      "nodes": 280,
       "rooms": 36,
-      "files": 219,
-      "artifactBytes": 472949
+      "files": 225,
+      "artifactBytes": 484247
     },
     {
       "name": "zod",
@@ -26,7 +44,7 @@
       "nodes": 748,
       "rooms": 32,
       "files": 563,
-      "artifactBytes": 2495411
+      "artifactBytes": 2495752
     }
   ]
 }

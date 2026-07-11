@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { analyze } from "./pipeline.js";
 import { writeWorld } from "./write.js";
-import { parseConfigJson, type FileConfig } from "./config.js";
+import { parseConfigFile, type FileConfig } from "./config.js";
 import { createFilesystemCache, type CachePort } from "./cache.js";
 import { RecordingReporter } from "./progress.js";
 import { buildProvenance, writeProvenance } from "./provenance.js";
@@ -144,7 +144,7 @@ export async function runAnalyze(
   let userConfig: FileConfig | undefined;
   if (opts.config !== undefined) {
     const text = await readFile(resolve(opts.config), "utf8");
-    userConfig = parseConfigJson(text);
+    userConfig = parseConfigFile(text, opts.config);
   }
   if (opts.seed !== undefined) userConfig = { ...(userConfig ?? {}), layoutSeed: opts.seed };
 

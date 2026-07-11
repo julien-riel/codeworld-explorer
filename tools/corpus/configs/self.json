@@ -5,5 +5,5 @@
     "name": "codeworld-explorer",
     "url": "https://github.com/codeworld/codeworld-explorer"
   },
-  "exclude": ["apps/client/public/worlds"]
+  "exclude": ["apps/client/public/worlds", "tools/corpus/samples"]
 }

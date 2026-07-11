@@ -40,6 +40,13 @@ export interface CodeExtraction {
   readonly relations: Relation[];
   /** `sourceNodeId` → noms de symboles TRIÉS et dédupliqués (contrat §3.8, `symbolNames`). */
   readonly symbolsByNodeId: ReadonlyMap<string, string[]>;
+  /**
+   * `sourceNodeId` (fichier) → spécificateurs d'import/re-export BRUTS, dans l'ordre AST.
+   * Inclut les modules « bare » (npm, frameworks) que la résolution de relations écarte :
+   * c'est la matière première des signaux de framework de la couche 3 (classify-static.ts).
+   * Non sérialisé (interne au pipeline) ; les fichiers sans import en sont absents.
+   */
+  readonly importsByNodeId: ReadonlyMap<string, readonly string[]>;
   readonly warnings: readonly string[];
   readonly stats: {
     readonly parsedFiles: number;
@@ -199,6 +206,18 @@ export async function extractCode(
   symbols.sort(compareSymbols);
   relations.sort(compareRelations);
 
+  // Index des spécificateurs d'import bruts par fichier (pour la couche 3). Construit
+  // depuis les faits (cache-transparent), dans l'ordre AST ; les fichiers sans import
+  // sont omis pour garder l'index creux. Non trié : consommé par agrégation, pas sérialisé.
+  const importsByNodeId = new Map<string, readonly string[]>();
+  for (const { node, facts } of factsByNode) {
+    if (facts.imports.length === 0) continue;
+    importsByNodeId.set(
+      node.id,
+      facts.imports.map((i) => i.specifier),
+    );
+  }
+
   // Index nom-de-symbole par nœud, trié et dédupliqué (pour SearchDoc.symbolNames).
   const symbolsByNodeId = new Map<string, string[]>();
   for (const s of symbols) {
@@ -215,6 +234,7 @@ export async function extractCode(
     symbols,
     relations,
     symbolsByNodeId,
+    importsByNodeId,
     warnings,
     stats: { parsedFiles: factsByNode.length, parsedLines, cache: parseCache.stats },
   };

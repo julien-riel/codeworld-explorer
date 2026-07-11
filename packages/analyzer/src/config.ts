@@ -2,10 +2,10 @@
  * Configuration du pipeline (couche 1 de classification, métadonnées, exclusions
  * supplémentaires) et calcul de `configurationHash` (contrat §5.4).
  *
- * Format : JSON (`--config <fichier.json>`). Le PRD §12.1 évoque « YAML/JSON » ;
- * en sprint 2 on s'en tient au JSON, suffisant pour démontrer que la couche 1 prime
- * sur la couche 2, et sans dépendance de parseur YAML. La validation est manuelle et
- * stricte : toute clé ou valeur inattendue lève une `ConfigError` claire.
+ * Formats : JSON et YAML (`--config <fichier.json|.yaml|.yml>`, PRD §12.1 « YAML/JSON »,
+ * sprint 6). Le format n'est qu'une syntaxe d'entrée : `validateConfig` s'applique de la
+ * même façon aux deux, et le `configurationHash` en est indépendant. La validation est
+ * manuelle et stricte : toute clé ou valeur inattendue lève une `ConfigError` claire.
  *
  * `configurationHash` couvre TOUT ce qui influence les octets de l'artefact SAUF les
  * composantes déjà présentes dans le tuple d'identité FR-026 (contrat §10.1) :
@@ -21,6 +21,7 @@ import {
   sha256Hex,
   type Category,
 } from "@codeworld/world-schema";
+import { parse as parseYaml } from "yaml";
 import { ConfigError } from "./errors.js";
 import { CLASSIFICATION_RULES, themeForCategory } from "./classify.js";
 import { DEFAULT_EXCLUDED_DIRS, MAX_FILE_SIZE_BYTES } from "./exclusions.js";
@@ -113,7 +114,7 @@ function parseCategoryRecord(v: unknown, ctx: string): Map<string, Category> {
 }
 
 /**
- * Valide et normalise le contenu JSON d'un fichier de configuration. Lève
+ * Désérialise et valide le contenu JSON d'un fichier de configuration. Lève
  * `ConfigError` sur toute forme inattendue ; renvoie une `FileConfig` typée.
  */
 export function parseConfigJson(text: string): FileConfig {
@@ -123,7 +124,38 @@ export function parseConfigJson(text: string): FileConfig {
   } catch (error) {
     throw new ConfigError(`Configuration JSON illisible : ${error instanceof Error ? error.message : String(error)}`);
   }
-  if (!isPlainObject(data)) throw new ConfigError("La configuration doit être un objet JSON.");
+  return validateConfig(data);
+}
+
+/**
+ * Désérialise et valide une configuration YAML (PRD §12.1 « YAML/JSON »). Le format ne
+ * change RIEN au fond : YAML n'est qu'une syntaxe d'entrée, la même `FileConfig` en sort et
+ * la même validation stricte s'applique. Le JSON étant un sous-ensemble de YAML 1.2, un
+ * fichier JSON reste accepté par ce parseur.
+ */
+export function parseConfigYaml(text: string): FileConfig {
+  let data: unknown;
+  try {
+    data = parseYaml(text, { prettyErrors: true });
+  } catch (error) {
+    throw new ConfigError(`Configuration YAML illisible : ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return validateConfig(data);
+}
+
+/** Choisit le parseur d'après l'extension : `.yaml`/`.yml` → YAML, sinon JSON. */
+export function parseConfigFile(text: string, filename: string): FileConfig {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".yaml") || lower.endsWith(".yml")) return parseConfigYaml(text);
+  return parseConfigJson(text);
+}
+
+/**
+ * Valide et normalise un objet de configuration DÉJÀ désérialisé (issu de JSON ou de YAML).
+ * Lève `ConfigError` sur toute forme inattendue ; renvoie une `FileConfig` typée.
+ */
+export function validateConfig(data: unknown): FileConfig {
+  if (!isPlainObject(data)) throw new ConfigError("La configuration doit être un objet.");
   assertNoUnknownKeys(
     data,
     ["layoutSeed", "idHashLength", "exclude", "repository", "snapshot", "classifications"],

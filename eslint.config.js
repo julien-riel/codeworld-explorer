@@ -12,6 +12,9 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/coverage/**",
       "**/*.tsbuildinfo",
+      // Dépôts-échantillons du corpus : arborescences FICTIVES à analyser (dépendances
+      // volontairement absentes, hors de tout tsconfig) — jamais compilées ni linté.
+      "tools/corpus/samples/**",
     ],
   },
 

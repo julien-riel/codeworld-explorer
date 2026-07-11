@@ -1,0 +1,9 @@
+{
+  "layoutSeed": "codeworld",
+  "repository": {
+    "owner": "codeworld",
+    "name": "react-dashboard",
+    "url": "https://github.com/codeworld/react-dashboard",
+    "license": "MIT"
+  }
+}

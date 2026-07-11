@@ -1,0 +1,8 @@
+{
+  "name": "nest-shop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Exemple de service e-commerce style NestJS (corpus CodeWorld).",
+  "license": "MIT",
+  "type": "module"
+}

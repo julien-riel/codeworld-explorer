@@ -1,0 +1,8 @@
+{
+  "name": "react-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Exemple de tableau de bord React (corpus CodeWorld).",
+  "license": "MIT",
+  "type": "module"
+}

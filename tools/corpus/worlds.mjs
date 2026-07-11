@@ -8,6 +8,11 @@
  *
  * `self` et `schema` proviennent de ce dépôt ; `zod` est un paquet tiers volumineux
  * sous licence MIT, présent de façon déterministe grâce au lockfile pnpm figé.
+ *
+ * `nest-shop` et `react-dashboard` sont deux dépôts-échantillons COMMITTÉS sous
+ * `tools/corpus/samples/` : petits, déterministes et variés (backend en couches façon
+ * NestJS, front React), ils illustrent la classification — mélange de règles de noms de
+ * dossiers (couche 2) et d'heuristiques statiques sur des dossiers au nom neutre (couche 3).
  */
 
 import { fileURLToPath } from "node:url";
@@ -23,7 +28,19 @@ const configDir = join(here, "configs");
  * Corpus, TRIÉ par `name`. `source` est le chemin de l'arborescence à analyser ;
  * `config` le fichier de configuration à passer au CLI.
  */
+const samplesDir = join(here, "samples");
+
 export const WORLDS = [
+  {
+    name: "nest-shop",
+    source: join(samplesDir, "nest-shop"),
+    config: join(configDir, "nest-shop.json"),
+  },
+  {
+    name: "react-dashboard",
+    source: join(samplesDir, "react-dashboard"),
+    config: join(configDir, "react-dashboard.json"),
+  },
   {
     name: "schema",
     source: join(REPO_ROOT, "packages", "world-schema"),
